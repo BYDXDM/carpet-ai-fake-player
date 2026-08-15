@@ -1,0 +1,17 @@
+plugins {
+    id 'fabric-loom'
+}
+
+dependencies {
+    // Loom will automatically remapJar the provided mod jars and add them to the modCompileClasspath.
+    // If you want to use a specific version of Carpet, you can do so by adding it here.
+}
+
+processResources {
+    inputs.property "version", project.version
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
