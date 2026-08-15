@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "carpet-ai-fake-player",
+  "version": "${version}",
+  "name": "Carpet AI Fake Player",
+  "description": "A Carpet addon that gives fake players AI-powered autonomous behavior via LLM APIs.",
+  "authors": [
+    "Your Name"
+  ],
+  "contact": {
+    "homepage": "https://github.com/yourname/carpet-ai-fake-player",
+    "sources": "https://github.com/yourname/carpet-ai-fake-player"
+  },
+  "license": "MIT",
+  "icon": "assets/carpet-ai-fake-player/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.carpetai.CarpetAIFakePlayer"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "carpet": ">=1.4.147"
+  },
+  "suggests": {
+    "carpet": "*"
+  }
+}
