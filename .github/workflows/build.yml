@@ -27,23 +27,23 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle
-        id: gradle-build
-        run: gradle build --no-daemon --stacktrace 2>&1 | tee build-output.txt ; echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+      - name: Build with Gradle (verbose)
+        run: gradle build --no-daemon --info 2>&1 | tee build-output.txt
 
-      - name: Find JAR files
+      - name: Show build log
         if: always()
         run: |
-          echo "## 查找结果" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Log (last 300 lines)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "=== 查找所有 JAR 文件 ===" >> $GITHUB_STEP_SUMMARY
-          find . -name "*.jar" -type f >> $GITHUB_STEP_SUMMARY 2>&1 || echo "没有找到 JAR" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "=== build 目录内容 ===" >> $GITHUB_STEP_SUMMARY
-          ls -la build/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/ 不存在" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "=== build/libs 目录内容 ===" >> $GITHUB_STEP_SUMMARY
-          ls -la build/libs/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/libs/ 不存在" >> $GITHUB_STEP_SUMMARY
+          tail -300 build-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## find JAR" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          find . -name "*.jar" -not -path "./.gradle/*" >> $GITHUB_STEP_SUMMARY 2>&1
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## ls build/libs" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ls -laR build/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/ not found" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Build Artifact
