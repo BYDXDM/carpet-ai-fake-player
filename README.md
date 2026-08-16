@@ -4,7 +4,7 @@
 
 假人可以理解玩家用聊天命令下达的指令，自主执行移动、放置/破坏方块、攻击实体、跟随玩家等动作，并且接入多家大模型 API 作为"大脑"。
 
-> 支持 Minecraft **1.21.1** · Fabric 加载器 · JDK 21 · Carpet ≥ 1.4.147
+> 支持 Minecraft **1.21.11** · Fabric 加载器 · JDK 21 · Carpet ≥ 1.4.194
 
 ---
 
@@ -26,10 +26,10 @@
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| Minecraft | 1.21.1 | 固定 |
-| Fabric Loader | ≥ 0.16.10 | 模组加载器 |
-| Fabric API | 0.116.9+1.21.1 | 必装 |
-| Carpet (fabric-carpet) | ≥ 1.4.147 | 本模组核心依赖 |
+| Minecraft | 1.21.11 | 固定 |
+| Fabric Loader | ≥ 0.19.3 | 模组加载器 |
+| Fabric API | 0.141.6+1.21.11 | 必装 |
+| Carpet (fabric-carpet) | ≥ 1.4.194 | 本模组核心依赖 |
 
 > 本模组已**内置打包** OkHttp / Gson / Cloth Config，无需额外安装这些库。
 
@@ -202,7 +202,7 @@ com.example.carpetai/
 ## 🗺️ 路线图（待实现）
 
 - [ ] Mod Menu 图形化配置界面（Cloth Config 集成，当前为纯 JSON / 命令配置）
-- [ ] 真实寻路（当前 MOVE 为瞬移定位；Carpet 假人无公开寻路 API，需接 Baritone——但 Baritone 目前最高支持 1.20.1，1.21.1 暂不可用）
+- [ ] 真实寻路（当前 MOVE 为瞬移定位；Carpet 假人无公开寻路 API，需接 Baritone——但 Baritone 目前最高支持 1.20.1，1.21.11 暂不可用）
 - [ ] 村民交易等更复杂的实体交互
 - [ ] 物品栏/背包管理进阶
 
