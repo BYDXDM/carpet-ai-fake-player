@@ -27,47 +27,28 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Show Gradle version
-        run: gradle --version
-
       - name: Build with Gradle
-        run: gradle build --no-daemon 2>&1
+        id: build
+        continue-on-error: true
+        run: |
+          gradle build --no-daemon --stacktrace 2>&1 | tail -80 > /tmp/build-err.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: List all outputs
-        id: list
+      - name: Show build errors
         if: always()
         run: |
-          JARS=$(find . -name "*.jar" -not -path "./.gradle/*" 2>/dev/null || echo "none")
-          BUILD_TREE=$(ls -laR build/ 2>/dev/null || echo "build/ not found")
-          TASKS=$(gradle tasks --all 2>&1 | grep -i "jar\|build\|assemble" || echo "no matching tasks")
-          echo "jars<<EOF" >> $GITHUB_OUTPUT
-          echo "$JARS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "build_tree<<EOF" >> $GITHUB_OUTPUT
-          echo "$BUILD_TREE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "tasks<<EOF" >> $GITHUB_OUTPUT
-          echo "$TASKS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "## Build Exit Code: ${{ steps.build.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/build-err.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## JARs found:" >> $GITHUB_STEP_SUMMARY
+          find . -name "*.jar" -not -path "./.gradle/*" 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
+          echo "## build/libs:" >> $GITHUB_STEP_SUMMARY
+          ls -la build/libs/ 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "not found" >> $GITHUB_STEP_SUMMARY
+          exit 0
 
-      - name: Write debug info to summary
-        if: always()
+      - name: Fail if build failed
+        if: steps.build.outputs.exit_code != '0'
         run: |
-          echo "## JARs found" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.list.outputs.jars }}" >> $GITHUB_STEP_SUMMARY
-          echo "## Build tree" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.list.outputs.build_tree }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "## Relevant tasks" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.list.outputs.tasks }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: carpet-ai-fake-player-jar
-          path: build/libs/
-          retention-days: 30
+          echo "Build failed with exit code ${{ steps.build.outputs.exit_code }}"
+          exit 1
