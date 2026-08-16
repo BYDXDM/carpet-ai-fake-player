@@ -104,13 +104,22 @@ public class ActionExecutor {
                     ok = true;
                     break;
 
-                // 扩展动作（需要更多 Minecraft API 支持，暂时标记）
+                // 扩展动作
                 case "BREAK_BLOCK":
+                    ok = executeBreakBlock(player, action);
+                    break;
                 case "PLACE_BLOCK":
+                    ok = executePlaceBlock(player, action);
+                    break;
                 case "ATTACK":
+                    ok = executeAttack(player, action);
+                    break;
+                case "FOLLOW":
+                    ok = executeFollow(player, action);
+                    break;
                 case "USE_ITEM":
                     player.getServer().getPlayerManager().broadcast(
-                        Text.literal("<" + player.getName().getString() + "> §7(" + type + " — not yet implemented)"), false);
+                        Text.literal("<" + player.getName().getString() + "> §7(USE_ITEM — not yet implemented)"), false);
                     ok = true;
                     break;
 
@@ -133,5 +142,132 @@ public class ActionExecutor {
 
     private static float getFloat(JsonObject obj, String key, float def) {
         return obj.has(key) ? obj.get(key).getAsFloat() : def;
+    }
+
+    // ====== Action implementations ======
+
+    private static boolean executeBreakBlock(ServerPlayerEntity player, JsonObject action) {
+        double x = action.get("x").getAsDouble();
+        double y = action.get("y").getAsDouble();
+        double z = action.get("z").getAsDouble();
+        // 距离检查
+        double dist = player.squaredDistanceTo(x, y, z);
+        if (dist > 25.0) { // 5 格以内
+            CarpetAIFakePlayer.LOGGER.warn("BREAK_BLOCK too far: {}", dist);
+            return false;
+        }
+        // 使用 ServerPlayerInteractionManager 破坏方块
+        var world = player.getServerWorld();
+        var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
+        var state = world.getBlockState(pos);
+        if (state.isAir()) {
+            CarpetAIFakePlayer.LOGGER.warn("BREAK_BLOCK: no block at {},{},{}", x, y, z);
+            return false;
+        }
+        // 设置玩家看向方块，然后模拟破坏
+        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
+        player.interactionManager.tryBreakBlock(pos);
+        CarpetAIFakePlayer.LOGGER.info("{} breaking block at {}", player.getName().getString(), pos);
+        return true;
+    }
+
+    private static boolean executePlaceBlock(ServerPlayerEntity player, JsonObject action) {
+        double x = action.get("x").getAsDouble();
+        double y = action.get("y").getAsDouble();
+        double z = action.get("z").getAsDouble();
+        double dist = player.squaredDistanceTo(x, y, z);
+        if (dist > 25.0) {
+            CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK too far: {}", dist);
+            return false;
+        }
+        var world = player.getServerWorld();
+        var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
+        // 检查目标位置是否为空
+        if (!world.getBlockState(pos).isAir()) {
+            CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: position occupied at {},{},{}", x, y, z);
+            return false;
+        }
+        // 检查手持物品
+        var stack = player.getMainHandStack();
+        if (stack.isEmpty()) {
+            CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: no item in hand");
+            return false;
+        }
+        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
+        // 使用 interactionManager 放置方块
+        var result = player.interactionManager.interactBlock(
+            player, net.minecraft.util.Hand.MAIN_HAND,
+            new net.minecraft.util.hit.BlockHitResult(
+                pos.toCenterPos(),
+                net.minecraft.util.math.Direction.UP,
+                pos, false
+            )
+        );
+        CarpetAIFakePlayer.LOGGER.info("{} placing block at {}: {}", player.getName().getString(), pos, result);
+        return true;
+    }
+
+    private static boolean executeAttack(ServerPlayerEntity player, JsonObject action) {
+        // 攻击最近的目标实体
+        String targetName = action.has("target") ? action.get("target").getAsString() : null;
+        var world = player.getServerWorld();
+        double range = 5.0;
+        var closest = (net.minecraft.entity.Entity) null;
+        double closestDist = Double.MAX_VALUE;
+
+        for (var entity : world.iterateEntities()) {
+            if (entity == player) continue;
+            if (!entity.isLiving()) continue;
+            double d = player.squaredDistanceTo(entity);
+            if (d > range * range) continue;
+            if (targetName != null && !entity.getName().getString().equalsIgnoreCase(targetName)) continue;
+            if (d < closestDist) {
+                closestDist = d;
+                closest = entity;
+            }
+        }
+        if (closest == null) {
+            CarpetAIFakePlayer.LOGGER.warn("ATTACK: no target found");
+            return false;
+        }
+        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.EYES, closest.getEyePos());
+        player.attack(closest);
+        CarpetAIFakePlayer.LOGGER.info("{} attacking {}", player.getName().getString(), closest.getName().getString());
+        return true;
+    }
+
+    private static boolean executeFollow(ServerPlayerEntity player, JsonObject action) {
+        String targetName = action.get("target").getAsString();
+        var world = player.getServerWorld();
+        var target = world.getPlayerByUuid(java.util.UUID.fromString(targetName));
+        if (target == null) {
+            // 尝试按名字找
+            target = world.getPlayerByUuid(null);
+            for (var p : world.getPlayers()) {
+                if (p.getName().getString().equalsIgnoreCase(targetName)) {
+                    target = p;
+                    break;
+                }
+            }
+        }
+        if (target == null) {
+            CarpetAIFakePlayer.LOGGER.warn("FOLLOW: target '{}' not found", targetName);
+            return false;
+        }
+        // 保持 2 格距离跟随
+        double followDist = action.has("distance") ? action.get("distance").getAsDouble() : 2.0;
+        double dx = target.getX() - player.getX();
+        double dz = target.getZ() - player.getZ();
+        double dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > followDist) {
+            double scale = (dist - followDist) / dist;
+            player.setPosition(
+                player.getX() + dx * scale,
+                target.getY(),  // 保持同一 Y 层
+                player.getZ() + dz * scale
+            );
+        }
+        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.EYES, target.getEyePos());
+        return true;
     }
 }

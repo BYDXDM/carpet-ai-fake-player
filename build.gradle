@@ -33,6 +33,12 @@ dependencies {
     // OkHttp and Gson for API calls
     implementation "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
     implementation "com.google.code.gson:gson:${project.gson_version}"
+    include "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
+    include "com.google.code.gson:gson:${project.gson_version}"
+
+    // Cloth Config for Mod Menu
+    modImplementation "maven.modrinth:cloth-config:${project.cloth_config_version}"
+    include "maven.modrinth:cloth-config:${project.cloth_config_version}"
 }
 
 processResources {
