@@ -31,13 +31,14 @@ jobs:
         run: |
           set -o pipefail
           gradle build --no-daemon 2>&1 | tee build-output.txt
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "BUILD_EXIT_CODE=$EXIT_CODE" >> $GITHUB_ENV
-          exit $EXIT_CODE
 
-      - name: Show build output on failure
-        if: failure() || env.BUILD_EXIT_CODE != '0'
-        run: tail -200 build-output.txt
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-output.txt
+          retention-days: 5
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
