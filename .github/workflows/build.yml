@@ -34,19 +34,12 @@ jobs:
       - name: Find JAR files
         if: always()
         run: |
-          echo "## JAR文件位置" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          find build -name "*.jar" -type f 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No jars in build/" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          find build -name "*.jar" -type f 2>/dev/null || echo "No jars found"
-
-      - name: Show build errors
-        if: failure() || steps.gradle-build.outputs.exit_code != '0'
-        run: |
-          echo "## Build Output (last 200 lines)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -200 build-output.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "=== 查找 JAR 文件 ==="
+          find . -name "*.jar" -type f 2>/dev/null
+          echo "=== build 目录内容 ==="
+          ls -la build/ 2>/dev/null || echo "build/ 目录不存在"
+          echo "=== build/libs 目录内容 ==="
+          ls -la build/libs/ 2>/dev/null || echo "build/libs/ 目录不存在"
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
