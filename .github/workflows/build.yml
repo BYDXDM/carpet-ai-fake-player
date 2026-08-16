@@ -27,25 +27,42 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle
-        run: gradle build --no-daemon --info 2>&1 | tee build-output.txt ; echo "EXIT=${PIPESTATUS[0]}" >> $GITHUB_ENV
+      - name: Show Gradle version
+        run: gradle --version
 
-      - name: Find all outputs
+      - name: Build with Gradle
+        run: gradle build --no-daemon 2>&1
+
+      - name: List all outputs
+        id: list
         if: always()
         run: |
-          find . -name "*.jar" -not -path "./.gradle/*" > find-output.txt 2>&1
-          ls -laR build/ >> find-output.txt 2>&1 || echo "build/ not found" >> find-output.txt
-          tail -300 build-output.txt > build-tail.txt
+          JARS=$(find . -name "*.jar" -not -path "./.gradle/*" 2>/dev/null || echo "none")
+          BUILD_TREE=$(ls -laR build/ 2>/dev/null || echo "build/ not found")
+          TASKS=$(gradle tasks --all 2>&1 | grep -i "jar\|build\|assemble" || echo "no matching tasks")
+          echo "jars<<EOF" >> $GITHUB_OUTPUT
+          echo "$JARS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "build_tree<<EOF" >> $GITHUB_OUTPUT
+          echo "$BUILD_TREE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "tasks<<EOF" >> $GITHUB_OUTPUT
+          echo "$TASKS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Upload debug logs
+      - name: Write debug info to summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-logs
-          path: |
-            build-tail.txt
-            find-output.txt
-          retention-days: 5
+        run: |
+          echo "## JARs found" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.list.outputs.jars }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Build tree" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.list.outputs.build_tree }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## Relevant tasks" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.list.outputs.tasks }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
