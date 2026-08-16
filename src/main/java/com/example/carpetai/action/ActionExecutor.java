@@ -172,7 +172,8 @@ public class ActionExecutor {
         }
         // 设置玩家看向方块，然后模拟破坏
         player.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
-        player.interactionManager.tryBreakBlock(pos, Direction.UP, pos.toCenterPos(), true);
+        // 破坏方块，1.21.1 只需要 BlockPos 参数
+        player.interactionManager.tryBreakBlock(pos);
         CarpetAIFakePlayer.LOGGER.info("{} breaking block at {}", player.getName().getString(), pos);
         return true;
     }
