@@ -4,7 +4,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
-import carpet.patches.EntityPlayerMPFake;
 
 public class ActionParser {
     public static void parseAndExecute(ServerPlayerEntity player, String response) {
@@ -23,11 +22,7 @@ public class ActionParser {
                     double x = action.get("x").getAsDouble();
                     double y = action.get("y").getAsDouble();
                     double z = action.get("z").getAsDouble();
-                    if (player instanceof EntityPlayerMPFake fake) {
-                        fake.marcoMoveTo((int) x, (int) y, (int) z, 1.0);
-                    } else {
-                        player.setPosition(x, y, z);
-                    }
+                    player.setPosition(x, y, z);
                     break;
                     
                 case "LOOK":
