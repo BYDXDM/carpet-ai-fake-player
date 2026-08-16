@@ -3,9 +3,6 @@ package com.example.carpetai;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import carpet.patches.FakePlayer;
 
 public class ActionParser {
     public static void parseAndExecute(ServerPlayerEntity player, String response) {

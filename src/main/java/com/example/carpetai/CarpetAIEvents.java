@@ -1,8 +1,6 @@
 package com.example.carpetai;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import carpet.patches.FakePlayer;
-import carpet.patches.FakePlayerInfo;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +20,7 @@ public class CarpetAIEvents {
         public String lastAction;
         public long lastActionTime;
         public int taskProgress;
-        
+
         public PlayerContext() {
             this.taskProgress = 0;
         }

@@ -2,12 +2,11 @@ package com.example.carpetai;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
-import carpet.CarpetServer;
+import carpet.patches.EntityPlayerMPFake;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -24,7 +23,7 @@ public class CarpetAICommands {
                             String playerName = StringArgumentType.getString(context, "playerName");
                             String prompt = StringArgumentType.getString(context, "prompt");
                             ServerPlayerEntity source = context.getSource().getPlayer();
-                            
+
                             if (source == null) {
                                 context.getSource().sendError(Text.literal("This command can only be used by players."));
                                 return 0;
@@ -34,8 +33,8 @@ public class CarpetAICommands {
                             CompletableFuture.runAsync(() -> {
                                 try {
                                     // 1. 检查 Carpet 假人是否存在
-                                    var fakePlayer = CarpetServer.playerCommand.resolvePlayer(source, playerName);
-                                    if (fakePlayer == null) {
+                                    ServerPlayerEntity fakePlayer = source.getServer().getPlayerManager().getPlayer(playerName);
+                                    if (fakePlayer == null || !(fakePlayer instanceof EntityPlayerMPFake)) {
                                         source.sendMessage(Text.literal("§c[AI] Player '" + playerName + "' not found or not a fake player."));
                                         return;
                                     }
@@ -49,9 +48,9 @@ public class CarpetAICommands {
                                         "PLACE_BLOCK(x,y,z), BREAK_BLOCK(x,y,z), CHAT(message), SWAP_HOTBAR(slot), " +
                                         "CROUCH, JUMP, SNEAK, DROP, SLEEP, LOOK_AT_PLAYER(playerName). " +
                                         "Example: {\"action\":\"LOOK_AT_PLAYER\",\"player\":\"Steve\"}";
-                                    
+
                                     String response = LLMClient.complete(systemPrompt, prompt);
-                                    
+
                                     // 3. 解析并执行
                                     ActionParser.parseAndExecute(fakePlayer, response);
                                     source.sendMessage(Text.literal("§a[AI] Action executed."));
