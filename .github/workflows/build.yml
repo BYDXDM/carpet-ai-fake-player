@@ -28,11 +28,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: gradle build --no-daemon
+        run: gradle build --no-daemon --stacktrace
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: carpet-ai-fake-player-jar
-          path: fabric/build/libs/*.jar
+          path: build/libs/*.jar
           retention-days: 30
