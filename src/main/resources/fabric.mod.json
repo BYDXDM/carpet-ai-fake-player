@@ -3,13 +3,13 @@
   "id": "carpet-ai-fake-player",
   "version": "${version}",
   "name": "Carpet AI Fake Player",
-  "description": "A Carpet addon that gives fake players AI-powered autonomous behavior via LLM APIs.",
+  "description": "A Carpet addon that gives fake players AI-powered autonomous behavior via LLM APIs (OpenAI, Anthropic, Gemini, Groq, Ollama, and custom endpoints).",
   "authors": [
-    "Your Name"
+    "BYDXDM"
   ],
   "contact": {
-    "homepage": "https://github.com/yourname/carpet-ai-fake-player",
-    "sources": "https://github.com/yourname/carpet-ai-fake-player"
+    "homepage": "https://github.com/BYDXDM/carpet-ai-fake-player",
+    "sources": "https://github.com/BYDXDM/carpet-ai-fake-player"
   },
   "license": "MIT",
   "environment": "*",
