@@ -28,16 +28,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: gradle build --no-daemon 2>&1
+        run: |
+          set -o pipefail
+          gradle build --no-daemon 2>&1 | tee build-output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "BUILD_EXIT_CODE=$EXIT_CODE" >> $GITHUB_ENV
+          exit $EXIT_CODE
 
-      - name: List build output
-        if: always()
-        run: ls -la build/libs/ 2>&1 || echo "No build/libs directory"
+      - name: Show build output on failure
+        if: failure() || env.BUILD_EXIT_CODE != '0'
+        run: tail -200 build-output.txt
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: carpet-ai-fake-player-jar
-          path: build/libs/
+          path: build/libs/*.jar
           retention-days: 30
