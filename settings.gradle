@@ -2,19 +2,11 @@ pluginManagement {
     repositories {
         maven {
             name = 'Fabric'
-            url = 'https://maven.fabricmc.net/repository/release/'
+            url = 'https://maven.fabricmc.net/'
         }
-        maven {
-            name = 'Fabric snapshots'
-            url = 'https://maven.fabricmc.net/repository/snapshot/'
-        }
-        maven {
-            name = 'Maven'
-            url = 'https://repo1.maven.org/maven2/'
-        }
+        mavenCentral()
         gradlePluginPortal()
     }
 }
 
 rootProject.name = 'carpet-ai-fake-player'
-include 'fabric'
