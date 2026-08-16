@@ -12,7 +12,6 @@
     "sources": "https://github.com/yourname/carpet-ai-fake-player"
   },
   "license": "MIT",
-  "icon": "assets/carpet-ai-fake-player/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
