@@ -3,6 +3,8 @@ package com.example.carpetai;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
+import carpet.patches.EntityPlayerMPFake;
 
 public class ActionParser {
     public static void parseAndExecute(ServerPlayerEntity player, String response) {
@@ -24,7 +26,7 @@ public class ActionParser {
                     if (player instanceof EntityPlayerMPFake fake) {
                         fake.marcoMoveTo((int) x, (int) y, (int) z, 1.0);
                     } else {
-                        player.teleport(x, y, z);
+                        player.setPosition(x, y, z);
                     }
                     break;
                     
