@@ -7,6 +7,12 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.command.argument.EntityAnchorArgumentType;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.entity.Entity;
 
 /**
  * 解析 LLM 返回的 JSON 动作并执行。
@@ -165,8 +171,8 @@ public class ActionExecutor {
             return false;
         }
         // 设置玩家看向方块，然后模拟破坏
-        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
-        player.interactionManager.tryBreakBlock(pos);
+        player.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
+        player.interactionManager.tryBreakBlock(pos, Direction.UP, pos.toCenterPos(), true);
         CarpetAIFakePlayer.LOGGER.info("{} breaking block at {}", player.getName().getString(), pos);
         return true;
     }
@@ -193,15 +199,11 @@ public class ActionExecutor {
             CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: no item in hand");
             return false;
         }
-        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
+        player.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
         // 使用 interactionManager 放置方块
         var result = player.interactionManager.interactBlock(
-            player, net.minecraft.util.Hand.MAIN_HAND,
-            new net.minecraft.util.hit.BlockHitResult(
-                pos.toCenterPos(),
-                net.minecraft.util.math.Direction.UP,
-                pos, false
-            )
+            player, player.getServerWorld(), stack, Hand.MAIN_HAND,
+            new BlockHitResult(pos.toCenterPos(), Direction.UP, pos, false)
         );
         CarpetAIFakePlayer.LOGGER.info("{} placing block at {}: {}", player.getName().getString(), pos, result);
         return true;
@@ -212,10 +214,13 @@ public class ActionExecutor {
         String targetName = action.has("target") ? action.get("target").getAsString() : null;
         var world = player.getServerWorld();
         double range = 5.0;
-        var closest = (net.minecraft.entity.Entity) null;
+        var closest = (Entity) null;
         double closestDist = Double.MAX_VALUE;
 
-        for (var entity : world.iterateEntities()) {
+        // 收集附近的生物实体
+        var box = player.getBoundingBox().expand(range);
+        var nearby = world.getOtherEntities(player, box);
+        for (var entity : nearby) {
             if (entity == player) continue;
             if (!entity.isLiving()) continue;
             double d = player.squaredDistanceTo(entity);
@@ -230,7 +235,7 @@ public class ActionExecutor {
             CarpetAIFakePlayer.LOGGER.warn("ATTACK: no target found");
             return false;
         }
-        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.EYES, closest.getEyePos());
+        player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, closest.getEyePos());
         player.attack(closest);
         CarpetAIFakePlayer.LOGGER.info("{} attacking {}", player.getName().getString(), closest.getName().getString());
         return true;
@@ -239,15 +244,12 @@ public class ActionExecutor {
     private static boolean executeFollow(ServerPlayerEntity player, JsonObject action) {
         String targetName = action.get("target").getAsString();
         var world = player.getServerWorld();
-        var target = world.getPlayerByUuid(java.util.UUID.fromString(targetName));
-        if (target == null) {
-            // 尝试按名字找
-            target = world.getPlayerByUuid(null);
-            for (var p : world.getPlayers()) {
-                if (p.getName().getString().equalsIgnoreCase(targetName)) {
-                    target = p;
-                    break;
-                }
+        // 先按名字精确匹配
+        var target = (ServerPlayerEntity) null;
+        for (var p : world.getPlayers()) {
+            if (p.getName().getString().equalsIgnoreCase(targetName)) {
+                target = p;
+                break;
             }
         }
         if (target == null) {
@@ -267,7 +269,7 @@ public class ActionExecutor {
                 player.getZ() + dz * scale
             );
         }
-        player.lookAt(net.minecraft.entity.EntityAnchorArgumentType.EntityAnchor.EYES, target.getEyePos());
+        player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target.getEyePos());
         return true;
     }
 }
