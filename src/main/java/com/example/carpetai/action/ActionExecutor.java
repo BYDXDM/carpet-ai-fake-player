@@ -6,7 +6,6 @@ import com.example.carpetai.entity.PlayerContext;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
 import net.minecraft.util.Hand;
@@ -58,7 +57,7 @@ public class ActionExecutor {
                         Math.pow(z - player.getZ(), 2));
                     if (dist > config.maxMoveDistance) {
                         CarpetAIFakePlayer.LOGGER.warn("MOVE distance {} exceeds limit {}", dist, config.maxMoveDistance);
-                        ((ServerWorld) player.getWorld()).getServer().getPlayerManager().broadcast(
+                        player.getEntityWorld().getServer().getPlayerManager().broadcast(
                             Text.literal("<" + player.getName().getString() + "> §7(I can't move that far)"), false);
                         return false;
                     }
@@ -76,7 +75,7 @@ public class ActionExecutor {
 
                 case "CHAT":
                     String message = action.get("message").getAsString();
-                    ((ServerWorld) player.getWorld()).getServer().getPlayerManager().broadcast(
+                    player.getEntityWorld().getServer().getPlayerManager().broadcast(
                         Text.literal("<" + player.getName().getString() + "> " + message), false);
                     ok = true;
                     break;
@@ -125,7 +124,7 @@ public class ActionExecutor {
                     ok = executeFollow(player, action);
                     break;
                 case "USE_ITEM":
-                    ((ServerWorld) player.getWorld()).getServer().getPlayerManager().broadcast(
+                    player.getEntityWorld().getServer().getPlayerManager().broadcast(
                         Text.literal("<" + player.getName().getString() + "> §7(USE_ITEM — not yet implemented)"), false);
                     ok = true;
                     break;
@@ -164,7 +163,7 @@ public class ActionExecutor {
             return false;
         }
         // 使用 ServerPlayerInteractionManager 破坏方块
-        var world = (ServerWorld) player.getWorld();
+        var world = player.getEntityWorld();
         var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
         var state = world.getBlockState(pos);
         if (state.isAir()) {
@@ -188,7 +187,7 @@ public class ActionExecutor {
             CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK too far: {}", dist);
             return false;
         }
-        var world = (ServerWorld) player.getWorld();
+        var world = player.getEntityWorld();
         var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
         // 检查目标位置是否为空
         if (!world.getBlockState(pos).isAir()) {
@@ -204,7 +203,7 @@ public class ActionExecutor {
         player.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
         // 使用 interactionManager 放置方块
         var result = player.interactionManager.interactBlock(
-            player, (ServerWorld) player.getWorld(), stack, Hand.MAIN_HAND,
+            player, player.getEntityWorld(), stack, Hand.MAIN_HAND,
             new BlockHitResult(pos.toCenterPos(), Direction.UP, pos, false)
         );
         CarpetAIFakePlayer.LOGGER.info("{} placing block at {}: {}", player.getName().getString(), pos, result);
@@ -214,7 +213,7 @@ public class ActionExecutor {
     private static boolean executeAttack(ServerPlayerEntity player, JsonObject action) {
         // 攻击最近的目标实体
         String targetName = action.has("target") ? action.get("target").getAsString() : null;
-        var world = (ServerWorld) player.getWorld();
+        var world = player.getEntityWorld();
         double range = 5.0;
         var closest = (Entity) null;
         double closestDist = Double.MAX_VALUE;
@@ -245,7 +244,7 @@ public class ActionExecutor {
 
     private static boolean executeFollow(ServerPlayerEntity player, JsonObject action) {
         String targetName = action.get("target").getAsString();
-        var world = (ServerWorld) player.getWorld();
+        var world = player.getEntityWorld();
         // 先按名字精确匹配
         var target = (ServerPlayerEntity) null;
         for (var p : world.getPlayers()) {

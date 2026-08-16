@@ -15,7 +15,6 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import carpet.patches.EntityPlayerMPFake;
 
@@ -44,7 +43,7 @@ public class ModCommands {
                         }
 
                         // 检查假人
-                        ServerPlayerEntity fakePlayer = ((ServerWorld) source.getWorld()).getServer().getPlayerManager().getPlayer(playerName);
+                        ServerPlayerEntity fakePlayer = source.getEntityWorld().getServer().getPlayerManager().getPlayer(playerName);
                         if (fakePlayer == null || !(fakePlayer instanceof EntityPlayerMPFake)) {
                             source.sendMessage(Text.literal("§c[AI] Player '" + playerName + "' not found or not a fake player."));
                             return 0;
