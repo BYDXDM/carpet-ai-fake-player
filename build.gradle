@@ -28,7 +28,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
     // Carpet
-    modImplementation "maven.modrinth:carpet:fabric-${project.carpet_version}"
+    modImplementation "maven.modrinth:carpet:${project.carpet_version}"
 
     // OkHttp and Gson for API calls
     implementation "com.squareup.okhttp3:okhttp:${project.okhttp_version}"

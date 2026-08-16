@@ -7,9 +7,6 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,27 +25,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        id: build
-        continue-on-error: true
-        run: |
-          gradle build --no-daemon --stacktrace 2>&1 | tail -120
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        run: gradle build --no-daemon --stacktrace
 
-      - name: Show build errors
-        if: always()
-        run: |
-          echo "## Build Exit Code: ${{ steps.build.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat /tmp/build-err.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "## JARs found:" >> $GITHUB_STEP_SUMMARY
-          find . -name "*.jar" -not -path "./.gradle/*" 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "none" >> $GITHUB_STEP_SUMMARY
-          echo "## build/libs:" >> $GITHUB_STEP_SUMMARY
-          ls -la build/libs/ 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "not found" >> $GITHUB_STEP_SUMMARY
-          exit 0
-
-      - name: Fail if build failed
-        if: steps.build.outputs.exit_code != '0'
-        run: |
-          echo "Build failed with exit code ${{ steps.build.outputs.exit_code }}"
-          exit 1
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: carpet-ai-fake-player
+          path: build/libs/*.jar
+          if-no-files-found: error
