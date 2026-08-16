@@ -21,7 +21,11 @@ public class ActionParser {
                     double x = action.get("x").getAsDouble();
                     double y = action.get("y").getAsDouble();
                     double z = action.get("z").getAsDouble();
-                    player.getNavigation().startMovingTo(x, y, z, 1.0);
+                    if (player instanceof EntityPlayerMPFake fake) {
+                        fake.marcoMoveTo((int) x, (int) y, (int) z, 1.0);
+                    } else {
+                        player.teleport(x, y, z);
+                    }
                     break;
                     
                 case "LOOK":
@@ -33,7 +37,7 @@ public class ActionParser {
                     
                 case "CHAT":
                     String message = action.get("message").getAsString();
-                    player.sendChatMessage(message);
+                    player.getServer().getPlayerManager().broadcast(Text.literal(message), false);
                     break;
                     
                 case "JUMP":
