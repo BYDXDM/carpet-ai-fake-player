@@ -27,24 +27,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle (verbose)
-        run: gradle build --no-daemon --info 2>&1 | tee build-output.txt
+      - name: Build with Gradle
+        run: gradle build --no-daemon --info 2>&1 | tee build-output.txt ; echo "EXIT=${PIPESTATUS[0]}" >> $GITHUB_ENV
 
-      - name: Show build log
+      - name: Find all outputs
         if: always()
         run: |
-          echo "## Build Log (last 300 lines)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -300 build-output.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "## find JAR" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          find . -name "*.jar" -not -path "./.gradle/*" >> $GITHUB_STEP_SUMMARY 2>&1
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "## ls build/libs" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          ls -laR build/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/ not found" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          find . -name "*.jar" -not -path "./.gradle/*" > find-output.txt 2>&1
+          ls -laR build/ >> find-output.txt 2>&1 || echo "build/ not found" >> find-output.txt
+          tail -300 build-output.txt > build-tail.txt
+
+      - name: Upload debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs
+          path: |
+            build-tail.txt
+            find-output.txt
+          retention-days: 5
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
