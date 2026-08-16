@@ -15,7 +15,7 @@ import static net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVE
 public class CarpetAICommands {
 
     public static void register() {
-        EVENT.register((dispatcher, registryAccess, environment, registrationEnvironment) -> {
+        EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(CommandManager.literal("ai")
                 .then(CommandManager.argument("playerName", StringArgumentType.word())
                     .then(CommandManager.argument("prompt", StringArgumentType.greedyString())
