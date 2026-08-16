@@ -31,7 +31,7 @@ jobs:
         id: build
         continue-on-error: true
         run: |
-          gradle build --no-daemon --stacktrace 2>&1 | tail -80 > /tmp/build-err.txt
+          gradle build --no-daemon --stacktrace 2>&1 | tail -120
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: Show build errors
