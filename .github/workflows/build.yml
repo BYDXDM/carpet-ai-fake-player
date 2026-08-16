@@ -34,12 +34,17 @@ jobs:
       - name: Find JAR files
         if: always()
         run: |
-          echo "=== 查找 JAR 文件 ==="
-          find . -name "*.jar" -type f 2>/dev/null
-          echo "=== build 目录内容 ==="
-          ls -la build/ 2>/dev/null || echo "build/ 目录不存在"
-          echo "=== build/libs 目录内容 ==="
-          ls -la build/libs/ 2>/dev/null || echo "build/libs/ 目录不存在"
+          echo "## 查找结果" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "=== 查找所有 JAR 文件 ===" >> $GITHUB_STEP_SUMMARY
+          find . -name "*.jar" -type f >> $GITHUB_STEP_SUMMARY 2>&1 || echo "没有找到 JAR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "=== build 目录内容 ===" >> $GITHUB_STEP_SUMMARY
+          ls -la build/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/ 不存在" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "=== build/libs 目录内容 ===" >> $GITHUB_STEP_SUMMARY
+          ls -la build/libs/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "build/libs/ 不存在" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
