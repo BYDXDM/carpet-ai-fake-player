@@ -61,14 +61,16 @@ public class LLMClient {
         }
 
         String url;
-        if (config.llmProvider.equals("google")) {
+        // 自定义端点对所有 provider（含 google）生效；google 在其上拼接模型与 key
+        String base = (config.apiUrl != null && !config.apiUrl.isEmpty()) ? config.apiUrl : provider.apiUrl();
+        if (provider instanceof GoogleProvider) {
+            while (base.endsWith("/")) {
+                base = base.substring(0, base.length() - 1);
+            }
             // Gemini uses model-specific URL
-            url = provider.apiUrl() + "/" + config.model + ":generateContent?key=" + config.apiKey;
-        } else if (config.apiUrl != null && !config.apiUrl.isEmpty()) {
-            // custom endpoint overrides default
-            url = config.apiUrl;
+            url = base + "/" + config.model + ":generateContent?key=" + config.apiKey;
         } else {
-            url = provider.apiUrl();
+            url = base;
         }
 
         JsonObject body = provider.buildRequestBody(

@@ -8,14 +8,14 @@ import com.google.gson.JsonParser;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
-import net.minecraft.util.Hand;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.entity.Entity;
 
 /**
  * 解析 LLM 返回的 JSON 动作并执行。
+ * 注意：本类所有方法都必须在服务器主线程上调用。
  */
 public class ActionExecutor {
 
@@ -24,15 +24,11 @@ public class ActionExecutor {
      */
     public static boolean execute(ServerPlayerEntity player, String response, PlayerContext ctx) {
         try {
-            String jsonStr = response.trim();
-            // 提取 JSON 块
-            if (jsonStr.contains("```json")) {
-                jsonStr = jsonStr.split("```json")[1].split("```")[0];
-            } else if (jsonStr.contains("```")) {
-                jsonStr = jsonStr.split("```")[1].split("```")[0];
+            JsonObject action = JsonParser.parseString(extractJson(response)).getAsJsonObject();
+            if (!action.has("action")) {
+                CarpetAIFakePlayer.LOGGER.warn("LLM response JSON has no 'action' field: {}", response);
+                return false;
             }
-
-            JsonObject action = JsonParser.parseString(jsonStr).getAsJsonObject();
             String type = action.get("action").getAsString().toUpperCase();
 
             ModConfig config = ModConfig.load();
@@ -150,6 +146,45 @@ public class ActionExecutor {
         return obj.has(key) ? obj.get(key).getAsFloat() : def;
     }
 
+    /**
+     * 从 LLM 原始回复中提取 JSON 字符串。
+     * 除 ``` 围栏外，LLM 还常在 JSON 前后附带说明文字，回退到截取首个 '{' 到最后一个 '}'。
+     */
+    private static String extractJson(String response) {
+        String s = response.trim();
+        if (s.contains("```json")) {
+            s = s.split("```json")[1].split("```")[0];
+        } else if (s.contains("```")) {
+            s = s.split("```")[1].split("```")[0];
+        }
+        int start = s.indexOf('{');
+        int end = s.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            s = s.substring(start, end + 1);
+        }
+        return s;
+    }
+
+    /** 解析动作类型，解析失败返回 null。供命令层在主线程外判断 WAIT 等控制类动作。 */
+    public static String parseActionType(String response) {
+        try {
+            JsonObject action = JsonParser.parseString(extractJson(response)).getAsJsonObject();
+            return action.has("action") ? action.get("action").getAsString().toUpperCase() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 解析 WAIT 的秒数，缺省 1 秒。 */
+    public static int parseWaitSeconds(String response) {
+        try {
+            JsonObject action = JsonParser.parseString(extractJson(response)).getAsJsonObject();
+            if (action.has("seconds")) return Math.max(0, action.get("seconds").getAsInt());
+        } catch (Exception ignored) {
+        }
+        return 1;
+    }
+
     // ====== Action implementations ======
 
     private static boolean executeBreakBlock(ServerPlayerEntity player, JsonObject action) {
@@ -164,7 +199,8 @@ public class ActionExecutor {
         }
         // 使用 ServerPlayerInteractionManager 破坏方块
         var world = player.getEntityWorld();
-        var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
+        // 用 ofFloored 而非 (int) 强转：负坐标时 (int) 向零截断会取到错误的方块
+        var pos = BlockPos.ofFloored(x, y, z);
         var state = world.getBlockState(pos);
         if (state.isAir()) {
             CarpetAIFakePlayer.LOGGER.warn("BREAK_BLOCK: no block at {},{},{}", x, y, z);
@@ -188,7 +224,8 @@ public class ActionExecutor {
             return false;
         }
         var world = player.getEntityWorld();
-        var pos = new net.minecraft.util.math.BlockPos((int) x, (int) y, (int) z);
+        // 负坐标时 (int) 强转会向零截断、取错方块，必须向下取整
+        var pos = BlockPos.ofFloored(x, y, z);
         // 检查目标位置是否为空
         if (!world.getBlockState(pos).isAir()) {
             CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: position occupied at {},{},{}", x, y, z);
@@ -200,19 +237,30 @@ public class ActionExecutor {
             CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: no item in hand");
             return false;
         }
+        // interactBlock 只能对已有的非空气方块交互，目标是空气位时会直接被跳过、永远放不出方块，
+        // 因此直接用手中物品对应的方块设置目标位置。
+        Block block = Block.getBlockFromItem(stack.getItem());
+        if (block == Blocks.AIR) {
+            CarpetAIFakePlayer.LOGGER.warn("PLACE_BLOCK: item in hand is not a block");
+            return false;
+        }
         player.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, pos.toCenterPos());
-        // 使用 interactionManager 放置方块
-        var result = player.interactionManager.interactBlock(
-            player, player.getEntityWorld(), stack, Hand.MAIN_HAND,
-            new BlockHitResult(pos.toCenterPos(), Direction.UP, pos, false)
-        );
-        CarpetAIFakePlayer.LOGGER.info("{} placing block at {}: {}", player.getName().getString(), pos, result);
+        world.setBlockState(pos, block.getDefaultState(), 3);
+        if (!player.isCreative()) {
+            stack.decrement(1);
+        }
+        CarpetAIFakePlayer.LOGGER.info("{} placed {} at {}", player.getName().getString(), block, pos);
         return true;
     }
 
     private static boolean executeAttack(ServerPlayerEntity player, JsonObject action) {
-        // 攻击最近的目标实体
-        String targetName = action.has("target") ? action.get("target").getAsString() : null;
+        // 攻击最近的目标实体；提示词与实现统一用 target，同时兼容 entity 字段
+        String targetName = null;
+        if (action.has("target")) {
+            targetName = action.get("target").getAsString();
+        } else if (action.has("entity")) {
+            targetName = action.get("entity").getAsString();
+        }
         var world = player.getEntityWorld();
         double range = 5.0;
         var closest = (Entity) null;
@@ -243,6 +291,10 @@ public class ActionExecutor {
     }
 
     private static boolean executeFollow(ServerPlayerEntity player, JsonObject action) {
+        if (!action.has("target")) {
+            CarpetAIFakePlayer.LOGGER.warn("FOLLOW: missing 'target' field");
+            return false;
+        }
         String targetName = action.get("target").getAsString();
         var world = player.getEntityWorld();
         // 先按名字精确匹配

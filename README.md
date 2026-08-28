@@ -12,7 +12,7 @@
 
 - 🧠 **LLM 驱动**：假人通过大模型理解玩家指令，返回 JSON 动作并执行
 - 🔌 **多提供商**：OpenAI / Anthropic / Google Gemini / Groq / 本地 Ollama / 任意 OpenAI 兼容端点
-- 💬 **对话交互**：`/ai <假人> <内容>` 与假人对话，也支持 `/tell <假人>` 私聊
+- 💬 **对话交互**：`/ai <假人> <内容>` 与假人对话（控制台也可用）
 - 🤖 **自主行动**：MOVE / LOOK / CHAT / JUMP / CROUCH / BREAK_BLOCK / PLACE_BLOCK / ATTACK / FOLLOW / DROP 等
 - 📦 **多假人并发**：内置任务队列，支持多假人同时处理任务，可配置并发上限
 - 🧾 **记忆与上下文**：自动维护对话历史，token 配额管理，防止 API 配额过度消耗
@@ -101,8 +101,8 @@
 | 提供商 | `llmProvider` 值 | 默认端点 | 默认模型建议 |
 |---|---|---|---|
 | OpenAI | `openai` | `api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
-| Anthropic | `anthropic` | `api.anthropic.com/v1/messages` | `claude-3-5-sonnet` |
-| Google Gemini | `google` | `generativelanguage.googleapis.com` | `gemini-1.5-flash` |
+| Anthropic | `anthropic` | `api.anthropic.com/v1/messages` | `claude-sonnet-4-5` |
+| Google Gemini | `google` | `generativelanguage.googleapis.com` | `gemini-2.5-flash` |
 | Groq | `groq` | `api.groq.com/openai/v1/chat/completions` | `llama-3.1-8b-instant` |
 | 本地 Ollama | `ollama` | `localhost:11434/v1/chat/completions` | `llama3` |
 | 自定义 | `custom` | 任意 OpenAI 兼容端点 | — |
@@ -124,7 +124,6 @@
 | `/ai set provider <name>` | 切换提供商 |
 | `/ai set model <name>` | 设置模型名 |
 | `/ai set key <key>` | 设置 API Key |
-| `/tell <假人> <内容>` | 私聊假人（等价于对话交互） |
 
 ---
 
@@ -156,7 +155,7 @@
 
 ```
 com.example.carpetai/
-  CarpetAIFakePlayer.java           入口(Mixins/EntryPoint)
+  CarpetAIFakePlayer.java           入口(EntryPoint)
   api/
     LLMProvider.java                LLM 提供商标识抽象
     LLMClient.java                  统一调度 + 提供商注册表

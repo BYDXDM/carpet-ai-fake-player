@@ -9,16 +9,16 @@ import com.example.carpetai.entity.PlayerContext;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.DoubleArgumentType;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import carpet.patches.EntityPlayerMPFake;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT;
@@ -33,26 +33,25 @@ public class ModCommands {
             aiRoot.then(CommandManager.argument("playerName", StringArgumentType.word())
                 .then(CommandManager.argument("prompt", StringArgumentType.greedyString())
                     .executes(context -> {
+                        var source = context.getSource();
                         String playerName = StringArgumentType.getString(context, "playerName");
                         String prompt = StringArgumentType.getString(context, "prompt");
-                        ServerPlayerEntity source = context.getSource().getPlayer();
-
-                        if (source == null) {
-                            context.getSource().sendError(Text.literal("This command can only be used by players."));
-                            return 0;
-                        }
+                        MinecraftServer server = source.getServer();
 
                         // 检查假人
-                        ServerPlayerEntity fakePlayer = source.getEntityWorld().getServer().getPlayerManager().getPlayer(playerName);
-                        if (fakePlayer == null || !(fakePlayer instanceof EntityPlayerMPFake)) {
-                            source.sendMessage(Text.literal("§c[AI] Player '" + playerName + "' not found or not a fake player."));
+                        var fakePlayer = server.getPlayerManager().getPlayer(playerName);
+                        if (!(fakePlayer instanceof EntityPlayerMPFake fake)) {
+                            source.sendError(Text.literal("Player '" + playerName + "' not found or not a fake player."));
                             return 0;
                         }
 
-                        // 任务队列
-                        boolean submitted = TaskQueue.submit(playerName, () -> executeAI(source, playerName, fakePlayer, prompt));
+                        // 在主线程上捕获假人当前状态，供 LLM 决策参考
+                        String botState = buildBotState(fake);
+
+                        boolean submitted = TaskQueue.submit(playerName,
+                            () -> executeAI(server, source, playerName, fake, prompt, botState));
                         if (!submitted) {
-                            source.sendMessage(Text.literal("§c[AI] " + playerName + " is busy or task queue is full."));
+                            source.sendError(Text.literal("[AI] " + playerName + " is busy or task queue is full."));
                             return 0;
                         }
 
@@ -161,59 +160,81 @@ public class ModCommands {
         });
     }
 
-    private static void executeAI(ServerPlayerEntity source, String playerName,
-                                   ServerPlayerEntity fakePlayer, String prompt) {
+    private static void executeAI(MinecraftServer server, ServerCommandSource source, String playerName,
+                                   EntityPlayerMPFake fakePlayer, String prompt, String botState) {
         try {
             PlayerContext ctx = TaskQueue.get(playerName);
             ModConfig config = ModConfig.load();
 
             // 检查 token 预算
             if (ctx != null && ctx.isOverBudget()) {
-                source.sendMessage(Text.literal("§c[AI] " + playerName + " has exceeded token budget."));
+                source.sendError(Text.literal("[AI] " + playerName + " has exceeded token budget."));
                 return;
             }
 
-            String systemPrompt = buildSystemPrompt(playerName, ctx);
+            String systemPrompt = buildSystemPrompt(playerName, ctx, botState);
 
-            // 调用 LLM（带历史记录）
-            String response = LLMClient.complete(
-                systemPrompt, prompt,
-                ctx != null ? ctx.dialogueHistory : null
-            );
+            // 调用 LLM（带历史记录）。此调用阻塞数十秒，必须留在后台线程；
+            // 传入历史快照，避免等待期间 /ai clear 修改列表引发并发修改异常。
+            List<Map<String, String>> historySnapshot =
+                ctx != null ? new ArrayList<>(ctx.dialogueHistory) : null;
+            String response = LLMClient.complete(systemPrompt, prompt, historySnapshot);
 
-            // 更新上下文
-            if (ctx != null) {
-                ctx.addDialogue("user", prompt);
-                ctx.addDialogue("assistant", response);
-                ctx.trimHistory(config.contextLength);
-                ctx.lastMessageTime = System.currentTimeMillis();
-                // 粗略估算 token
-                ctx.tokenUsage += (prompt.length() + response.length()) / 3;
-                if (ctx.tokenBudget == 0) ctx.tokenBudget = config.maxTokenBudget;
+            // WAIT：在后台线程等待，占住该假人的任务槽，防止等待期间插入新指令
+            if ("WAIT".equals(ActionExecutor.parseActionType(response))) {
+                Thread.sleep(Math.min(ActionExecutor.parseWaitSeconds(response), 30) * 1000L);
             }
 
-            // 执行动作
-            ActionExecutor.execute(fakePlayer, response, ctx);
+            // 动作执行涉及世界/实体操作，必须回到服务器主线程
+            server.execute(() -> {
+                // 更新上下文
+                if (ctx != null) {
+                    ctx.addDialogue("user", prompt);
+                    ctx.addDialogue("assistant", response);
+                    ctx.trimHistory(config.contextLength);
+                    ctx.lastMessageTime = System.currentTimeMillis();
+                    // 粗略估算 token
+                    ctx.tokenUsage += (prompt.length() + response.length()) / 3;
+                    if (ctx.tokenBudget == 0) ctx.tokenBudget = config.maxTokenBudget;
+                }
 
-            source.sendMessage(Text.literal("§a[AI] " + playerName + " responded."));
+                ActionExecutor.execute(fakePlayer, response, ctx);
 
+                source.sendMessage(Text.literal("§a[AI] " + playerName + " responded."));
+            });
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             CarpetAIFakePlayer.LOGGER.error("AI execution error for " + playerName, e);
-            source.sendMessage(Text.literal("§c[AI] Error: " + e.getMessage()));
+            source.sendError(Text.literal("[AI] Error: " + e.getMessage()));
         }
     }
 
-    private static String buildSystemPrompt(String playerName, PlayerContext ctx) {
+    /** 在服务器主线程上读取假人的当前状态，注入到系统提示词中。 */
+    private static String buildBotState(EntityPlayerMPFake bot) {
+        var stack = bot.getMainHandStack();
+        return String.format(
+            "Your current state: position=(%.1f, %.1f, %.1f), yaw=%.0f, pitch=%.0f, health=%.1f, main_hand=%s. ",
+            bot.getX(), bot.getY(), bot.getZ(), bot.getYaw(), bot.getPitch(), bot.getHealth(),
+            stack.isEmpty() ? "empty" : stack.getName().getString());
+    }
+
+    private static String buildSystemPrompt(String playerName, PlayerContext ctx, String botState) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a Minecraft bot named ").append(playerName).append(". ");
         sb.append("You are a fake player controlled by Carpet mod. ");
         sb.append("Respond with a SINGLE JSON object representing an action to perform. ");
         sb.append("Available actions: ");
         sb.append("MOVE(x,y,z), LOOK(yaw,pitch), CHAT(message), JUMP, CROUCH, ");
-        sb.append("BREAK_BLOCK(x,y,z), PLACE_BLOCK(x,y,z), ATTACK(entity), ");
-        sb.append("USE_ITEM(nearbyBlock), DROP, SWAP_HOTBAR(slot), WAIT(seconds). ");
+        sb.append("BREAK_BLOCK(x,y,z), PLACE_BLOCK(x,y,z), ATTACK(target), ");
+        sb.append("FOLLOW(target,distance), USE_ITEM(nearbyBlock), DROP, SWAP_HOTBAR(slot), WAIT(seconds). ");
         sb.append("Example: {\"action\":\"MOVE\",\"x\":100,\"y\":64,\"z\":200} ");
         sb.append("Example: {\"action\":\"CHAT\",\"message\":\"Hello!\"} ");
+
+        if (botState != null) {
+            sb.append(botState);
+        }
 
         if (ctx != null && ctx.lastAction != null) {
             sb.append("Your last action was: ").append(ctx.lastAction).append(". ");
