@@ -22,8 +22,8 @@ public class PlayerContext {
     public int tokenUsage = 0;
     public int tokenBudget = 0; // 0 = 无限制
 
-    // 任务队列
-    public boolean isBusy = false;
+    // 任务队列（isBusy 由后台工作线程与主线程共同读写，需 volatile 保证可见性）
+    public volatile boolean isBusy = false;
     public String currentTask = "";
 
     public PlayerContext(String playerName) {

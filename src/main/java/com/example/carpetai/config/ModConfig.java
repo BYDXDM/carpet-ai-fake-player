@@ -36,7 +36,8 @@ public class ModConfig {
     public int actionCooldownMs = 2000;          // 两次动作间最低间隔（毫秒）
     public double maxMoveDistance = 100.0;        // 单次移动最大距离
 
-    public static ModConfig load() {
+    // load/save 会被任务队列后台线程与命令线程并发调用，需要同步
+    public static synchronized ModConfig load() {
         if (INSTANCE != null) return INSTANCE;
         INSTANCE = new ModConfig();
         if (Files.exists(CONFIG_PATH)) {
@@ -65,7 +66,7 @@ public class ModConfig {
         return INSTANCE;
     }
 
-    public static void save() {
+    public static synchronized void save() {
         if (INSTANCE == null) return;
         try {
             Files.createDirectories(CONFIG_PATH.getParent());

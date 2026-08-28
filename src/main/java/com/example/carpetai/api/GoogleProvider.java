@@ -75,8 +75,18 @@ public class GoogleProvider implements LLMProvider {
 
     @Override
     public String extractContent(JsonObject responseBody) {
-        return responseBody.getAsJsonArray("candidates")
-                .get(0).getAsJsonObject()
+        var candidates = responseBody.getAsJsonArray("candidates");
+        if (candidates == null || candidates.size() == 0) {
+            String reason = responseBody.has("promptFeedback")
+                ? responseBody.getAsJsonObject("promptFeedback").toString() : "unknown";
+            throw new IllegalStateException("Gemini returned no candidates (prompt blocked: " + reason + ")");
+        }
+        var candidate = candidates.get(0).getAsJsonObject();
+        if (!candidate.has("content") || !candidate.getAsJsonObject("content").has("parts")) {
+            throw new IllegalStateException("Gemini returned no content (finishReason="
+                + candidate.get("finishReason") + ")");
+        }
+        return candidate
                 .getAsJsonObject("content")
                 .getAsJsonArray("parts")
                 .get(0).getAsJsonObject()
