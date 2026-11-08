@@ -16,6 +16,7 @@ public class PlayerContext {
     public int taskProgress;
 
     // 对话历史（最近 N 轮，每轮 {role, content}）
+    // 读写一律通过下方 synchronized 方法进行，外部只读访问请用 snapshotHistory() 取防御性快照
     public final List<Map<String, String>> dialogueHistory = new ArrayList<>();
 
     // 当前 token 消耗（近似）
@@ -31,14 +32,24 @@ public class PlayerContext {
         this.taskProgress = 0;
     }
 
-    public void addDialogue(String role, String content) {
+    /** 返回对话历史的防御性快照（与写入方共用本对象锁，避免并发修改）。 */
+    public synchronized List<Map<String, String>> snapshotHistory() {
+        return new ArrayList<>(dialogueHistory);
+    }
+
+    public synchronized void addDialogue(String role, String content) {
         dialogueHistory.add(Map.of("role", role, "content", content));
     }
 
-    public void trimHistory(int maxRounds) {
+    public synchronized void trimHistory(int maxRounds) {
         while (dialogueHistory.size() > maxRounds * 2) {
             dialogueHistory.removeFirst();
         }
+    }
+
+    /** 清空对话历史（/ai clear 与快照读取共用本对象锁）。 */
+    public synchronized void clearDialogue() {
+        dialogueHistory.clear();
     }
 
     public boolean canAct(long cooldownMs) {

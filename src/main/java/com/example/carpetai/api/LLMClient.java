@@ -35,6 +35,11 @@ public class LLMClient {
         register(new OpenAIProvider("https://api.groq.com/openai/v1/chat/completions") {
             @Override public String name() { return "groq"; }
         });
+        // custom：任意 OpenAI 兼容端点（OpenAI 协议复用）。无默认端点，
+        // 必须在配置里设置 apiUrl，为空时 complete() 统一给出明确报错。
+        register(new OpenAIProvider("") {
+            @Override public String name() { return "custom"; }
+        });
     }
 
     public static void register(LLMProvider provider) {
@@ -63,6 +68,12 @@ public class LLMClient {
         String url;
         // 自定义端点对所有 provider（含 google）生效；google 在其上拼接模型与 key
         String base = (config.apiUrl != null && !config.apiUrl.isEmpty()) ? config.apiUrl : provider.apiUrl();
+        if (base == null || base.isBlank()) {
+            // custom 等无默认端点的 provider 必须先配置 apiUrl，给出可操作的明确报错
+            throw new IOException("LLM API URL is empty: provider '" + config.llmProvider
+                + "' requires 'apiUrl' in config/carpet-ai-fake-player.json"
+                + " (an OpenAI-compatible /chat/completions endpoint).");
+        }
         if (provider instanceof GoogleProvider) {
             while (base.endsWith("/")) {
                 base = base.substring(0, base.length() - 1);

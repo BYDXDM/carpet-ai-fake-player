@@ -105,9 +105,9 @@
 | Google Gemini | `google` | `generativelanguage.googleapis.com` | `gemini-2.5-flash` |
 | Groq | `groq` | `api.groq.com/openai/v1/chat/completions` | `llama-3.1-8b-instant` |
 | 本地 Ollama | `ollama` | `localhost:11434/v1/chat/completions` | `llama3` |
-| 自定义 | `custom` | 任意 OpenAI 兼容端点 | — |
+| 自定义 | `custom` | 任意 OpenAI 兼容端点（`apiUrl` 必填） | — |
 
-> **自定义端点**：把 `llmProvider` 设为任意未知值，并在 `apiUrl` 填入你的 OpenAI 兼容 `/chat/completions` 地址即可。
+> **自定义端点**：把 `llmProvider` 设为 `custom`，并在 `config/carpet-ai-fake-player.json` 的 `apiUrl` 中填入你的 OpenAI 兼容 `/chat/completions` 地址。`custom` 没有默认端点，`apiUrl` 必填（为空时调用会报 "LLM API URL is empty"）；`apiKey` 与 `model` 照常用 `/ai set` 或配置文件设置。
 
 > **API Key 提示**：Gemini 的 key 需要带"API 密钥"格式，且模型通过 `:generateContent` 接口调用。Ollama 本地通常不需要 key。
 
@@ -124,6 +124,20 @@
 | `/ai set provider <name>` | 切换提供商 |
 | `/ai set model <name>` | 设置模型名 |
 | `/ai set key <key>` | 设置 API Key |
+
+---
+
+## 🔒 权限说明
+
+`/ai` 全部子命令（含 `/ai set key` 等配置命令）要求 **OP 权限等级 ≥ 2**：无权限玩家看不到也无法执行这些命令（服务器控制台不受限）。这是刻意为之的安全默认——否则任意玩家都能消耗服务器 API 配额、指挥假人移动/破坏/攻击。
+
+给信任的玩家授权：
+
+- **单人世界**：世界开启"允许作弊"后，宿主即满足等级 2 要求；
+- **局域网世界**：`Esc → 对局域网开放 → 允许作弊：开`，宿主满足等级 2；局域网内其他玩家无法获得（符合预期）；
+- **独立服务器**：在服务器控制台执行 `op <玩家名>`（写入 `ops.json`，默认授予最高等级），只把权限给信任的玩家。
+
+> `/ai set key` 会把 API Key 明文写入 `config/carpet-ai-fake-player.json`，请仅 OP 给信任的玩家。
 
 ---
 
@@ -148,6 +162,18 @@
 | `WAIT` | `seconds` | 等待一段时间 |
 
 > **安全限制**：所有移动类动作受 `maxMoveDistance` 距离上限约束；方块操作限制在 5 格内；动作间有 `actionCooldownMs` 冷却。
+
+---
+
+## 🔨 从源码构建
+
+**方式一（推荐）：GitHub Actions 云端构建** — 仓库已配 `.github/workflows/build.yml`（JDK 21 Temurin + Gradle，push / PR 自动触发），jar 在 Actions 运行页的 artifact（`build/libs/*.jar`）下载，本地无需任何环境。
+
+**方式二：本地构建（2026-11-07 盘点时已断，需先修复）** — 仓库无 Gradle wrapper，靠根目录 `build.bat` 调用系统 Gradle，目前有三处失效：
+
+- `build.bat` 里 `cd /d D:\ai\carpet-ai-fake-player` 是项目迁入 `D:\ai\工作\` 之前的旧路径；
+- 其依赖的 `D:\ai\jdk-21.0.2` 与 `D:\ai\gradle-extract\gradle-8.10`（JDK 21 / Gradle 8.10）现不存在（位于 `D:\ai` 层级，不在 2026-11-07 工作区大扫除范围内，系更早的清理移除）；
+- 修复方式：把 `build.bat` 的 cd 路径改为当前目录并重装 JDK 21 + Gradle 8.10+，然后 `gradle build --no-daemon`，产物在 `build/libs/`。
 
 ---
 

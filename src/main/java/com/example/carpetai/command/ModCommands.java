@@ -16,10 +16,8 @@ import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import carpet.patches.EntityPlayerMPFake;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 import static net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT;
 
@@ -27,7 +25,10 @@ public class ModCommands {
 
     public static void register() {
         EVENT.register((dispatcher, registryAccess, environment) -> {
-            var aiRoot = CommandManager.literal("ai");
+            // 安全基线：/ai 全命令树（含 /ai set key 等配置命令）要求 OP 权限等级 2，
+            // 无权限玩家不可见也不可执行；服务器控制台拥有最高等级不受影响。
+            var aiRoot = CommandManager.literal("ai")
+                .requires(src -> src.hasPermissionLevel(2));
 
             // /ai <假人> <内容>  — 主交互命令
             aiRoot.then(CommandManager.argument("playerName", StringArgumentType.word())
@@ -48,8 +49,15 @@ public class ModCommands {
                         // 在主线程上捕获假人当前状态，供 LLM 决策参考
                         String botState = buildBotState(fake);
 
+                        // 在主线程上对对话历史做防御性快照：历史写入方（回调、/ai clear）
+                        // 全部在主线程，快照也在主线程完成，worker 线程不再触碰可变历史，
+                        // 消除 worker 复制与主线程写入并发修改的竞态窗口
+                        PlayerContext snapshotCtx = TaskQueue.get(playerName);
+                        List<Map<String, String>> historySnapshot =
+                            snapshotCtx != null ? snapshotCtx.snapshotHistory() : null;
+
                         boolean submitted = TaskQueue.submit(playerName,
-                            () -> executeAI(server, source, playerName, fake, prompt, botState));
+                            () -> executeAI(server, source, playerName, fake, prompt, botState, historySnapshot));
                         if (!submitted) {
                             source.sendError(Text.literal("[AI] " + playerName + " is busy or task queue is full."));
                             return 0;
@@ -89,7 +97,7 @@ public class ModCommands {
                         String name = StringArgumentType.getString(context, "playerName");
                         PlayerContext ctx = TaskQueue.get(name);
                         if (ctx != null) {
-                            ctx.dialogueHistory.clear();
+                            ctx.clearDialogue();
                             ctx.tokenUsage = 0;
                             context.getSource().sendMessage(Text.literal("§a[AI] Cleared context for " + name));
                         } else {
@@ -161,23 +169,27 @@ public class ModCommands {
     }
 
     private static void executeAI(MinecraftServer server, ServerCommandSource source, String playerName,
-                                   EntityPlayerMPFake fakePlayer, String prompt, String botState) {
+                                   EntityPlayerMPFake fakePlayer, String prompt, String botState,
+                                   List<Map<String, String>> historySnapshot) {
+        // busy 标志恰好释放一次：回调已提交时由回调的 finally 释放（晚于回调真正执行完），
+        // 未提交（出错/中断）时由本方法 finally 释放。isBusy 的释放时机不再早于回调，
+        // 消除"busy 已释放、回调尚未执行"窗口内新任务与回调写历史的竞态。
+        boolean callbackSubmitted = false;
         try {
             PlayerContext ctx = TaskQueue.get(playerName);
             ModConfig config = ModConfig.load();
 
-            // 检查 token 预算
+            // 检查 token 预算（worker 线程上的用户反馈必须回主线程）
             if (ctx != null && ctx.isOverBudget()) {
-                source.sendError(Text.literal("[AI] " + playerName + " has exceeded token budget."));
+                server.execute(() -> source.sendError(
+                    Text.literal("[AI] " + playerName + " has exceeded token budget.")));
                 return;
             }
 
             String systemPrompt = buildSystemPrompt(playerName, ctx, botState);
 
-            // 调用 LLM（带历史记录）。此调用阻塞数十秒，必须留在后台线程；
-            // 传入历史快照，避免等待期间 /ai clear 修改列表引发并发修改异常。
-            List<Map<String, String>> historySnapshot =
-                ctx != null ? new ArrayList<>(ctx.dialogueHistory) : null;
+            // 调用 LLM（带历史快照）。此调用阻塞数十秒，必须留在后台线程；
+            // 快照已在命令执行时（主线程）完成，worker 线程不再读取可变历史，避免并发修改。
             String response = LLMClient.complete(systemPrompt, prompt, historySnapshot);
 
             // WAIT：在后台线程等待，占住该假人的任务槽，防止等待期间插入新指令
@@ -187,27 +199,56 @@ public class ModCommands {
 
             // 动作执行涉及世界/实体操作，必须回到服务器主线程
             server.execute(() -> {
-                // 更新上下文
-                if (ctx != null) {
-                    ctx.addDialogue("user", prompt);
-                    ctx.addDialogue("assistant", response);
-                    ctx.trimHistory(config.contextLength);
-                    ctx.lastMessageTime = System.currentTimeMillis();
-                    // 粗略估算 token
-                    ctx.tokenUsage += (prompt.length() + response.length()) / 3;
-                    if (ctx.tokenBudget == 0) ctx.tokenBudget = config.maxTokenBudget;
+                try {
+                    // 回调跨越了最长 90s 的阻塞调用，期间假人可能被 /player remove 移除或死亡：
+                    // 入口先做存活校验，失效则记日志并安全返回（finally 仍会释放 busy）
+                    if (fakePlayer.isRemoved() || !fakePlayer.isAlive()) {
+                        CarpetAIFakePlayer.LOGGER.warn(
+                            "[Carpet AI] Bot '{}' is removed or dead after the LLM call, skipping actions.",
+                            playerName);
+                        return;
+                    }
+
+                    // 更新上下文
+                    if (ctx != null) {
+                        ctx.addDialogue("user", prompt);
+                        ctx.addDialogue("assistant", response);
+                        ctx.trimHistory(config.contextLength);
+                        ctx.lastMessageTime = System.currentTimeMillis();
+                        // 粗略估算 token
+                        ctx.tokenUsage += (prompt.length() + response.length()) / 3;
+                        if (ctx.tokenBudget == 0) ctx.tokenBudget = config.maxTokenBudget;
+                    }
+
+                    ActionExecutor.execute(fakePlayer, response, ctx);
+
+                    source.sendMessage(Text.literal("§a[AI] " + playerName + " responded."));
+                } catch (Exception e) {
+                    // 主线程回调兜底：异常不再沿 tick 任务路径向上传播；
+                    // 用户可见文案用固定模板，原始异常（可能含带 key 的 URL）只进服务器日志
+                    CarpetAIFakePlayer.LOGGER.error("AI callback error for " + playerName, e);
+                    source.sendError(Text.literal(
+                        "[AI] " + playerName + " failed to process the action, see the server log for details."));
+                } finally {
+                    // busy 标志在回调真正执行完毕后才释放
+                    TaskQueue.release(playerName);
                 }
-
-                ActionExecutor.execute(fakePlayer, response, ctx);
-
-                source.sendMessage(Text.literal("§a[AI] " + playerName + " responded."));
             });
+            callbackSubmitted = true;
 
         } catch (InterruptedException e) {
+            // 服务器停止时的正常中断，静默返回（finally 会释放 busy）
             Thread.currentThread().interrupt();
         } catch (Exception e) {
+            // 原始异常可能包含带 API key 的 URL 等敏感信息，只进服务器日志；
+            // 对命令源的反馈一律 server.execute 回主线程，并使用固定文案模板（不回显 e.getMessage()）
             CarpetAIFakePlayer.LOGGER.error("AI execution error for " + playerName, e);
-            source.sendError(Text.literal("[AI] Error: " + e.getMessage()));
+            server.execute(() -> source.sendError(Text.literal(
+                "[AI] " + playerName + " task failed, see the server log for details.")));
+        } finally {
+            if (!callbackSubmitted) {
+                TaskQueue.release(playerName);
+            }
         }
     }
 
