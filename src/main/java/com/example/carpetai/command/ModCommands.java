@@ -16,6 +16,7 @@ import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import carpet.patches.EntityPlayerMPFake;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -73,18 +74,27 @@ public class ModCommands {
             aiRoot.then(CommandManager.literal("list")
                 .executes(context -> {
                     var source = context.getSource();
-                    var all = TaskQueue.all();
-                    if (all.isEmpty()) {
-                        source.sendMessage(Text.literal("§7[AI] No active fake players."));
-                    } else {
-                        source.sendMessage(Text.literal("§6[AI] Active fake players:"));
-                        for (var entry : all.entrySet()) {
-                            PlayerContext ctx = entry.getValue();
-                            String status = ctx.isBusy ? "§e(busy)" : "§a(idle)";
-                            source.sendMessage(Text.literal("  §7- " + entry.getKey() + " " + status
-                                + " §7token:" + ctx.tokenUsage + "/" + ctx.tokenBudget
-                                + " §7history:" + ctx.dialogueHistory.size() / 2 + " turns"));
+                    MinecraftServer server = source.getServer();
+                    // 只展示当前仍在线的假人：上下文在假人被删后会残留（保留对话
+                    // 记忆以便重建同名假人续聊），幽灵条目不应再列为"活跃"
+                    List<Map.Entry<String, PlayerContext>> online = new ArrayList<>();
+                    for (var entry : TaskQueue.all().entrySet()) {
+                        if (server.getPlayerManager().getPlayer(entry.getKey())
+                                instanceof EntityPlayerMPFake) {
+                            online.add(entry);
                         }
+                    }
+                    if (online.isEmpty()) {
+                        source.sendMessage(Text.literal("§7[AI] No active fake players."));
+                        return Command.SINGLE_SUCCESS;
+                    }
+                    source.sendMessage(Text.literal("§6[AI] Active fake players:"));
+                    for (var entry : online) {
+                        PlayerContext ctx = entry.getValue();
+                        String status = ctx.isBusy ? "§e(busy)" : "§a(idle)";
+                        source.sendMessage(Text.literal("  §7- " + entry.getKey() + " " + status
+                            + " §7token:" + ctx.tokenUsage + "/" + ctx.tokenBudget
+                            + " §7history:" + ctx.dialogueHistory.size() / 2 + " turns"));
                     }
                     return Command.SINGLE_SUCCESS;
                 })

@@ -30,15 +30,11 @@ dependencies {
     // Carpet
     modImplementation "maven.modrinth:carpet:${project.carpet_version}"
 
-    // OkHttp and Gson for API calls
+    // OkHttp for API calls（需打进 jar）；Gson 由 Minecraft 运行时自带，
+    // 仅保留编译期依赖，不再 include 进 jar
     implementation "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
     implementation "com.google.code.gson:gson:${project.gson_version}"
     include "com.squareup.okhttp3:okhttp:${project.okhttp_version}"
-    include "com.google.code.gson:gson:${project.gson_version}"
-
-    // Cloth Config for Mod Menu
-    modImplementation "maven.modrinth:cloth-config:${project.cloth_config_version}"
-    include "maven.modrinth:cloth-config:${project.cloth_config_version}"
 }
 
 processResources {

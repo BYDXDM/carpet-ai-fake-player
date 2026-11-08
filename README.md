@@ -31,7 +31,7 @@
 | Fabric API | 0.141.6+1.21.11 | 必装 |
 | Carpet (fabric-carpet) | ≥ 1.4.194 | 本模组核心依赖 |
 
-> 本模组已**内置打包** OkHttp / Gson / Cloth Config，无需额外安装这些库。
+> 本模组已**内置打包** OkHttp / Gson，无需额外安装这些库。
 
 **步骤**：
 1. 下载 `carpet-ai-fake-player-1.0.0.jar`
@@ -90,7 +90,6 @@
   "contextLength": 10,
   "maxTokenBudget": 0,
   "maxConcurrentTasks": 3,
-  "taskTimeoutSeconds": 300,
   "actionCooldownMs": 2000,
   "maxMoveDistance": 100.0
 }
@@ -220,7 +219,7 @@ com.example.carpetai/
 → `MOVE` 受 `maxMoveDistance`（默认 100 格）限制，可调大配置。
 
 **Q: 需要数据库类依赖吗？**
-→ 不需要，OkHttp / Gson / Cloth Config 已内置打包进 jar。
+→ 不需要，OkHttp / Gson 已内置打包进 jar。
 
 ---
 

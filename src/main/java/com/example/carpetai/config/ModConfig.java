@@ -5,8 +5,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * 模组配置，持久化到 config/carpet-ai-fake-player.json。
@@ -30,7 +32,6 @@ public class ModConfig {
 
     // ---- 任务队列 ----
     public int maxConcurrentTasks = 3;           // 同时执行的假人任务数上限
-    public int taskTimeoutSeconds = 300;         // 单任务超时（秒）
 
     // ---- Action 限制 ----
     public int actionCooldownMs = 2000;          // 两次动作间最低间隔（毫秒）
@@ -54,7 +55,6 @@ public class ModConfig {
                 INSTANCE.contextLength = getInt(obj, "contextLength", INSTANCE.contextLength);
                 INSTANCE.maxTokenBudget = getInt(obj, "maxTokenBudget", INSTANCE.maxTokenBudget);
                 INSTANCE.maxConcurrentTasks = getInt(obj, "maxConcurrentTasks", INSTANCE.maxConcurrentTasks);
-                INSTANCE.taskTimeoutSeconds = getInt(obj, "taskTimeoutSeconds", INSTANCE.taskTimeoutSeconds);
                 INSTANCE.actionCooldownMs = getInt(obj, "actionCooldownMs", INSTANCE.actionCooldownMs);
                 INSTANCE.maxMoveDistance = getDouble(obj, "maxMoveDistance", INSTANCE.maxMoveDistance);
             } catch (Exception e) {
@@ -80,10 +80,18 @@ public class ModConfig {
             obj.addProperty("contextLength", INSTANCE.contextLength);
             obj.addProperty("maxTokenBudget", INSTANCE.maxTokenBudget);
             obj.addProperty("maxConcurrentTasks", INSTANCE.maxConcurrentTasks);
-            obj.addProperty("taskTimeoutSeconds", INSTANCE.taskTimeoutSeconds);
             obj.addProperty("actionCooldownMs", INSTANCE.actionCooldownMs);
             obj.addProperty("maxMoveDistance", INSTANCE.maxMoveDistance);
-            Files.writeString(CONFIG_PATH, obj.toString());
+            // 先写临时文件再原子替换：进程中途被杀不会留下截断的配置
+            // （内含明文 API key，截断后下次启动解析失败只能整体回默认值）
+            Path tmp = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
+            Files.writeString(tmp, obj.toString());
+            try {
+                Files.move(tmp, CONFIG_PATH,
+                           StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             CarpetAIFakePlayer.LOGGER.error("Failed to save config", e);
         }

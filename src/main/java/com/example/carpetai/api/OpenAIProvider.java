@@ -58,9 +58,23 @@ public class OpenAIProvider implements LLMProvider {
 
     @Override
     public String extractContent(JsonObject responseBody) {
-        return responseBody.getAsJsonArray("choices")
-                .get(0).getAsJsonObject()
-                .getAsJsonObject("message")
-                .get("content").getAsString();
+        // 防御（与 GoogleProvider 同款）：choices 为空、message 缺失、content 为
+        // null（reasoning/工具调用模型）时给带 finishReason 的明确报错，而非 NPE/越界
+        var choices = responseBody.getAsJsonArray("choices");
+        if (choices == null || choices.size() == 0) {
+            throw new IllegalStateException("OpenAI-compatible API returned no choices"
+                + (responseBody.has("error")
+                    ? " (error: " + responseBody.get("error").toString() + ")" : ""));
+        }
+        JsonObject first = choices.get(0).getAsJsonObject();
+        JsonObject message = first.has("message") && first.get("message").isJsonObject()
+            ? first.getAsJsonObject("message") : null;
+        if (message == null || !message.has("content") || message.get("content").isJsonNull()) {
+            String finish = first.has("finish_reason") && !first.get("finish_reason").isJsonNull()
+                ? first.get("finish_reason").getAsString() : "unknown";
+            throw new IllegalStateException(
+                "OpenAI-compatible API returned no message content (finishReason=" + finish + ")");
+        }
+        return message.get("content").getAsString();
     }
 }

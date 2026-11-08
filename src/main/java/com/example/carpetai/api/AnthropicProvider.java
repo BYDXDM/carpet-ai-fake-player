@@ -68,9 +68,26 @@ public class AnthropicProvider implements LLMProvider {
 
     @Override
     public String extractContent(JsonObject responseBody) {
-        return responseBody.getAsJsonArray("content")
-                .get(0).getAsJsonObject()
-                .get("text").getAsString();
+        // 防御（与 GoogleProvider 同款）：content 缺失/为空、或全是 thinking 等
+        // 无 text 字段的块时，给带 stopReason 的明确报错，而非 NPE/越界
+        var blocks = responseBody.getAsJsonArray("content");
+        if (blocks == null || blocks.size() == 0) {
+            throw new IllegalStateException(
+                "Anthropic returned no content (stopReason=" + stopReason(responseBody) + ")");
+        }
+        for (var block : blocks) {          // 跳过 thinking 等非文本块，取第一个 text 块
+            JsonObject obj = block.getAsJsonObject();
+            if (obj.has("text") && !obj.get("text").isJsonNull()) {
+                return obj.get("text").getAsString();
+            }
+        }
+        throw new IllegalStateException(
+            "Anthropic returned no text block (stopReason=" + stopReason(responseBody) + ")");
+    }
+
+    private static String stopReason(JsonObject responseBody) {
+        return responseBody.has("stop_reason") && !responseBody.get("stop_reason").isJsonNull()
+            ? responseBody.get("stop_reason").getAsString() : "unknown";
     }
 
     @Override

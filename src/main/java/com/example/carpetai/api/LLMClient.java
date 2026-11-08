@@ -66,7 +66,8 @@ public class LLMClient {
         }
 
         String url;
-        // 自定义端点对所有 provider（含 google）生效；google 在其上拼接模型与 key
+        // 自定义端点对所有 provider（含 google）生效；google 在其上拼接模型路径，
+        // key 一律通过请求头传递（见各 provider 的 headers()），不进 URL
         String base = (config.apiUrl != null && !config.apiUrl.isEmpty()) ? config.apiUrl : provider.apiUrl();
         if (base == null || base.isBlank()) {
             // custom 等无默认端点的 provider 必须先配置 apiUrl，给出可操作的明确报错
@@ -78,8 +79,8 @@ public class LLMClient {
             while (base.endsWith("/")) {
                 base = base.substring(0, base.length() - 1);
             }
-            // Gemini uses model-specific URL
-            url = base + "/" + config.model + ":generateContent?key=" + config.apiKey;
+            // Gemini uses model-specific URL；认证走 x-goog-api-key 请求头
+            url = base + "/" + config.model + ":generateContent";
         } else {
             url = base;
         }

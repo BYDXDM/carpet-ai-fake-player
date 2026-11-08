@@ -7,7 +7,8 @@ import java.util.Map;
 
 /**
  * Google Gemini 提供商。
- * 协议：/v1beta/models/{model}:generateContent，使用 query param key={apiKey} 认证。
+ * 协议：/v1beta/models/{model}:generateContent，使用 x-goog-api-key 请求头认证
+ * （key 不进 URL，避免泄漏进异常消息、代理与中间设备日志）。
  */
 public class GoogleProvider implements LLMProvider {
 
@@ -95,7 +96,10 @@ public class GoogleProvider implements LLMProvider {
 
     @Override
     public Map<String, String> headers(String apiKey) {
-        // Gemini 通常用 query param 传 key，这里也支持 header 方式
-        return Map.of("Content-Type", "application/json");
+        // Gemini 官方 REST API 支持 x-goog-api-key 请求头认证，key 不再拼进 URL
+        return Map.of(
+            "Content-Type", "application/json",
+            "x-goog-api-key", apiKey
+        );
     }
 }

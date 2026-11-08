@@ -23,7 +23,15 @@ public class TaskQueue {
     private static final AtomicInteger activeTasks = new AtomicInteger(0);
 
     private static ExecutorService newExecutor() {
-        return Executors.newFixedThreadPool(4, r -> {
+        // 池大小跟随 maxConcurrentTasks：上限配多大池就有多少工作线程，
+        // 避免两者脱节（上限 >4 时配置失效、<4 时线程空转）。配置读取异常回退 4。
+        int threads;
+        try {
+            threads = Math.max(1, ModConfig.load().maxConcurrentTasks);
+        } catch (Exception e) {
+            threads = 4;
+        }
+        return Executors.newFixedThreadPool(threads, r -> {
             Thread t = new Thread(r, "CarpetAI-Worker-" + WORKER_SEQ.incrementAndGet());
             t.setDaemon(true);
             return t;
@@ -94,12 +102,19 @@ public class TaskQueue {
 
         // isBusy 的检查与置位必须原子，且任务计数先于 submit 递增，
         // 否则任务可能在计数递增前完成递减，或被拒绝后假人永远 busy。
+        // 全局并发上限采用"先占位后比较、超限回滚"（incrementAndGet 原子），
+        // 消除两个假人并发提交时同时通过 get() 检查、短暂超限的竞态窗口。
         synchronized (ctx) {
             if (ctx.isBusy) return false;
-            if (activeTasks.get() >= config.maxConcurrentTasks) return false;
+            if (activeTasks.incrementAndGet() > config.maxConcurrentTasks) {
+                activeTasks.decrementAndGet();
+                CarpetAIFakePlayer.LOGGER.info(
+                    "[Carpet AI] Task for '{}' rejected: maxConcurrentTasks={} reached.",
+                    playerName, config.maxConcurrentTasks);
+                return false;
+            }
             ctx.isBusy = true;
         }
-        activeTasks.incrementAndGet();
         try {
             acquireExecutor().submit(() -> {
                 try {
@@ -115,6 +130,8 @@ public class TaskQueue {
         } catch (RejectedExecutionException e) {
             activeTasks.decrementAndGet();
             release(playerName);
+            CarpetAIFakePlayer.LOGGER.warn(
+                "[Carpet AI] Task for '{}' rejected: worker thread pool unavailable.", playerName);
             return false;
         }
         return true;
